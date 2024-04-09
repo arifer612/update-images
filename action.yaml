@@ -1,0 +1,60 @@
+---
+name: Container Image Updater
+description: Update the version of a container image
+branding:
+  icon: package
+  color: orange
+
+inputs:
+  image:
+    description: Name of the image
+    required: true
+  base-tag:
+    description: >
+      Name of the image tag to reference against, e.g. latest, edge, etc.
+    required: false
+    default: latest
+  rule:
+    description: >
+      Type of predetermined regex rules to parse the versions.
+      Currently available rules are:
+        - default, docker.io, docker
+        - lscr, lscr.io, linuxserver
+    required: false
+    default: default
+  compose-file:
+    description: >
+      File name of the compose file (should be in to root directory), e.g.,
+      compose.yaml, docker-compose.yaml, etc.
+    required: false
+    default: compose.yaml
+  verbose:
+    description: To turn on the verbosity of the script, set to true.
+    required: false
+    default: 'false'
+
+outputs:
+  commit-message:
+    description: >
+      The subject of a Git commit if there is a change made to the Compose file.
+  commit-description:
+    description: >
+      The desciption of a Git commit if there is a change made to the Compose
+      file.
+  git-branch:
+    description: >
+      The name of the new branch to be created.
+
+
+runs:
+  using: 'docker'
+  image: docker://ghcr.io/arifer612/docker-tag-updater:v1
+  args:
+    - "--tag"
+    - ${{ inputs.base-tag }}
+    - "--rule"
+    - ${{ inputs.rule }}
+    - ${{ inputs.verbose && '--verbose' }}
+    - "--file"
+    - ${{ inputs.compose-file }}
+    - ${{ inputs.image }}
