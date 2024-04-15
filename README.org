@@ -1,0 +1,126 @@
+#+TITLE: Docker Tag Updater Action
+
+[[LICENSE][https://img.shields.io/badge/license-GPL_3-green.svg]]
+[[https://develop.spacemacs.org][https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg]]
+
+Update the version of a container image using [[https://github.com/arifer612/docker-tag-updater][docker-tag-updater]].
+
+*** Inputs
+
+**** image
+*Required* Name of the image
+
+**** base-tag
+Name of the image tag to reference against, e.g. latest, edge, etc.
+
+(default: latest)
+
+**** rule
+Type of predetermined regex rules to parse the versions.
+Currently available rules are:
+- default, docker.io, docker
+- lscr, lscr.io, linuxserver
+
+(default: default)
+
+**** compose-file
+File name of the compose file (should be in to root directory), e.g.,
+compose.yaml, docker-compose.yaml, etc.
+
+(default: compose.yaml)
+
+**** verbose
+To turn on the verbosity of the script, set to true.
+
+(default: false)
+
+*** Outputs
+
+**** commit-message
+The subject of a Git commit if there is a change made to the Compose file.
+
+**** commit-description
+The desciption of a Git commit if there is a change made to the Compose
+file.
+
+**** git-branch
+The name of the new branch to be created.
+
+*** Example
+
+A scheduled workflow to check the image specifications in the
+~docker-compose.yaml~ file and update the semantic versions when a new version
+is available, using v1 of [[https://github.com/arifer612/docker-tag-updater][docker-tag-updater]] will look like:
+#+BEGIN_SRC yaml
+  ---
+  name: Check for new container image versions
+
+  on:
+    schedule:
+      - cron: '5 1 * * *'  # Run this every morning at 01:05
+
+  jobs:
+    check-and-update:
+      runs-on: ubuntu-latest
+      continue-on-error: true
+
+      strategy:
+        fail-fast: true
+        matrix:
+          file: [ docker-compose.yaml ]
+          base-tag: [ latest ]
+          rule: [ lscr ]
+          image:
+            # lscr.io/linuxserver/adguardhome-sync:latest with the lscr rule
+            - lscr.io/linuxserver/adguardhome-sync
+            # lscr.io/linuxserver/yq:latest with the lscr rule
+            - lscr.io/linuxserver/yq
+            # lscr.io/linuxserver/freshrss:latest with the lscr rule
+            - lscr.io/linuxserver/freshrss
+            # lscr.io/linuxserver/nginx:arm64v8-latest with the lscr rule (to be overwritten below)
+            - lscr.io/linuxserver/nginx
+            # traefik:latest with the default rule (to be overwritten below)
+            - docker.io/traefik
+          include:
+            # lscr.io/linuxserver/nginx:arm64v8-latest with the lscr rule
+            - image: lscr.io/linuxserver/nginx
+              base-tag: arm64v8-latest
+            # traefik:latest with the default rule
+            - image: traefik
+              rule: default
+
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v2
+
+        - name: Update the Compose file
+          id: update
+          uses: arifer612/update-images@v1
+          with:
+            image: ${{ matrix.image }}
+            base-tag: ${{ matrix.base-tag }}
+            rule: ${{ matrix.rule }}
+            compose-file: ${{ matrix.file }}
+
+        - name: Checks before continuing
+          id: check
+          continue-on-error: true
+          run: |
+            if ${{ steps.update.outputs.git-branch == '' }}; then
+              exit 1
+            fi
+            if $(git fetch origin ${{ steps.update.outputs.git-branch }} &> /dev/null); then
+              echo "::error title=⛔ error hint::Branch already exists"
+              exit 1
+            fi
+            echo "No errors, proceeding to commit changes and create a PR."
+
+        - name: Add and Commit
+          if: steps.check.outcome == 'success'
+          id: commit
+          uses: EndBug/add-and-commit@v9
+          with:
+            add: ${{ matrix.file }}
+            message: ${{ steps.update.outputs.commit-message }}
+            new_branch: ${{ steps.update.outputs.git-branch }}
+#+END_SRC
