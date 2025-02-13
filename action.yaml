@@ -48,7 +48,7 @@ outputs:
 
 runs:
   using: 'docker'
-  image: docker://ghcr.io/arifer612/docker-tag-updater:v1
+  image: docker://ghcr.io/arifer612/docker-tag-updater:v1.1.2
   args:
     - "--tag"
     - ${{ inputs.base-tag }}
